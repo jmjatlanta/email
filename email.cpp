@@ -60,7 +60,7 @@ class FirefoxEmailComposer : public EmailComposerImpl
 
 EmailComposer::EmailComposer()
 {
-#ifdef __LINUX__
+#ifdef __linux__
     impl = new FirefoxEmailComposer();
 #elif _WINDOWS
 	impl = new MapiEmailComposer();

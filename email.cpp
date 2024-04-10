@@ -222,15 +222,17 @@ bool MapiEmailComposer::compose()
 
         message.nFileCount = attach_size;
         message.lpFiles = attach;
-        for(size_t i = 0; i < attachments.size(); ++i)
+        size_t i = 0;
+        for(auto itr : attachments)
         {
-            str[i] = converter.from_bytes(attachments[i].string());
+            str[i] = converter.from_bytes(itr.string());
             attach[i].ulReserved = 0;
             attach[i].flFlags = 0;
             attach[i].nPosition = -1;
             attach[i].lpFileType = nullptr;
             attach[i].lpszFileName = &str[i][0];
             attach[i].lpszPathName = &str[i][0];
+            ++i;
         }
     }
 

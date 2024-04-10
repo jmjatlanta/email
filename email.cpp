@@ -1,5 +1,7 @@
+#include <set>
 #include <vector>
 #include <sstream>
+#include <iostream>
 #include "email.h"
 #ifdef _WINDOWS
 #include "Windows.h"
@@ -16,7 +18,7 @@ class EmailComposerImpl
     void addTo(const std::string& in) { toCollection.push_back(in); }
     void addCC(const std::string& in) { ccCollection.push_back(in); }
     void addBCC(const std::string& in) { bccCollection.push_back(in); }
-    void addAttachment(const std::filesystem::path& file) { attachments.push_back(file); }
+    void addAttachment(const std::filesystem::path& file) { attachments.insert(file); }
     void setSubject(const std::string& in) { subject = in; }
     void setBody(const std::string& in) { body = in; }
 
@@ -29,7 +31,7 @@ class EmailComposerImpl
     std::vector<std::string> bccCollection;
     std::string subject;
     std::string body;
-    std::vector<std::filesystem::path> attachments;
+    std::set<std::filesystem::path> attachments;
 };
 
 #ifdef _WINDOWS
@@ -273,15 +275,28 @@ bool FirefoxEmailComposer::compose()
 	    if (!isFirst)
 		command << ",";
 	    isFirst = false;
-	    command << "body='" << body << "'" << "\"";
+	    command << "body='" << body << "'";
 	}
+        if (attachments.size() > 0)
+        {
+            if (!isFirst)
+                command << ",";
+            command << "attachment='";
+        }
+        bool isFirstFile = true;
 	for(auto att : attachments)
 	{
-	    if (!isFirst)
+	    if (!isFirstFile)
 		command << ",";
-	    isFirst = false;
-	    command << "attachment='" << att.string() << "'";
+	    isFirstFile = false;
+	    command << att.string();
 	}
+        if(!isFirstFile)
+        {
+            command << "'";
+        }
+        command << "\"";
+        std::cout << "Command: [" << command.str() << "]\n";
 	return system(command.str().c_str()) == 0;
 }
 

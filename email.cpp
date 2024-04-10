@@ -1,7 +1,6 @@
 #include <set>
 #include <vector>
 #include <sstream>
-#include <iostream>
 #include "email.h"
 #ifdef _WINDOWS
 #include "Windows.h"
@@ -296,7 +295,6 @@ bool FirefoxEmailComposer::compose()
             command << "'";
         }
         command << "\"";
-        std::cout << "Command: [" << command.str() << "]\n";
 	return system(command.str().c_str()) == 0;
 }
 

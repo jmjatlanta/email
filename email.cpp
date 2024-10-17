@@ -2,6 +2,15 @@
 #include <vector>
 #include <sstream>
 #include "email.h"
+#include "Logger.h"
+#include "boost/iostreams/filter/gzip.hpp"
+#include "boost/iostreams/copy.hpp"
+#include "boost/iostreams/filtering_streambuf.hpp"
+#define MAILIO
+#ifdef MAILIO
+#include "mailio/message.hpp"
+#include "mailio/smtp.hpp"
+#else
 #ifdef _WINDOWS
 #include "Windows.h"
 #include "MAPI.h"
@@ -9,11 +18,13 @@
 #include <locale>
 #include <codecvt>
 #endif
+#endif
 
 class EmailComposerImpl
 {
     public:
     virtual ~EmailComposerImpl() {}
+    void setFrom(const std::string& in) { from = in; }
     void addTo(const std::string& in) { toCollection.push_back(in); }
     void addCC(const std::string& in) { ccCollection.push_back(in); }
     void addBCC(const std::string& in) { bccCollection.push_back(in); }
@@ -21,6 +32,7 @@ class EmailComposerImpl
     void setSubject(const std::string& in) { subject = in; }
     void setBody(const std::string& in) { body = in; }
 
+    virtual void setSmtpUserPassword(const std::string& in) {}
     virtual bool compose() = 0;
 
     protected:
@@ -59,12 +71,32 @@ class FirefoxEmailComposer : public EmailComposerImpl
     bool compose() override;
 };
 
+class MailioEmailComposer : public EmailComposerImpl
+{
+    public:
+    ~MailioEmailComposer() {}
+
+    void setSmtpUserPassword(const std::string& in) override
+    {
+        smtpUserPassword = in;
+    }
+
+    bool compose() override;
+
+private:
+    std::string smtpUserPassword;
+};
+
 EmailComposer::EmailComposer()
 {
+#ifdef MAILIO
+    impl = new MailioEmailComposer();
+#else
 #ifdef __linux__
     impl = new FirefoxEmailComposer();
 #elif _WINDOWS
 	impl = new MapiEmailComposer();
+#endif
 #endif
 }
 
@@ -73,12 +105,14 @@ EmailComposer::~EmailComposer()
     delete impl;
 };
 
+void EmailComposer::setFrom(const std::string& in) { impl->setFrom(in); }
 void EmailComposer::addTo(const std::string& in) { impl->addTo(in); }
 void EmailComposer::addCC(const std::string& in) { impl->addCC(in); }
 void EmailComposer::addBCC(const std::string& in) { impl->addBCC(in); }
 void EmailComposer::setSubject(const std::string& in) { impl->setSubject(in); }
 void EmailComposer::setBody(const std::string& in) { impl->setBody(in); }
 void EmailComposer::addAttachment(const std::filesystem::path& in) { impl->addAttachment(in); }
+void EmailComposer::setSmtpUserPassword(const std::string& in) { impl->setSmtpUserPassword(in); }
 bool EmailComposer::compose() { return impl->compose(); }
 
 #ifdef _WINDOWS
@@ -251,6 +285,68 @@ bool MapiEmailComposer::compose()
 	return ret == 0;
 }
 #endif
+
+bool MailioEmailComposer::compose()
+{
+    mailio::message msg;
+    msg.from(mailio::mail_address(from, from));
+    std::for_each(toCollection.begin(), toCollection.end(), [&msg](const std::string& in)
+                  { msg.add_recipient(mailio::mail_address(in, in)); });
+    msg.subject(subject);
+    msg.content(body);
+
+    // add attacmehts
+    std::vector<std::shared_ptr<std::stringstream>> streams;
+    std::list<std::tuple<std::istream&, mailio::string_t, mailio::message::content_type_t>> atts;
+    std::for_each(attachments.begin(), attachments.end(), [&streams, &atts](const std::filesystem::path& curr)
+            {
+                // if the file does not exist, don't bother
+                if (std::filesystem::exists(curr))
+                {
+                    std::string filename = curr.filename().string();
+                    std::string extension = curr.extension().string();
+                    std::string newExtension = ".gz";
+                    if (std::filesystem::file_size(curr) > 100000)
+                    {
+                        std::ifstream inStream(curr, std::ios_base::in);
+                        std::shared_ptr<std::stringstream> outStream = std::make_shared<std::stringstream>();
+                        streams.push_back(outStream);
+                        boost::iostreams::filtering_streambuf<boost::iostreams::input> in;
+                        in.push(boost::iostreams::gzip_compressor());
+                        in.push(inStream);
+                        boost::iostreams::copy(in, *outStream);
+                        atts.push_back(std::make_tuple(std::ref(*outStream), filename + newExtension,
+                                mailio::message::content_type_t(mailio::message::media_type_t::APPLICATION, "gz")));
+                    }
+                    else
+                    {
+                        std::ifstream fileStream(curr, std::ios_base::in);
+                        auto streamPtr = std::make_shared<std::stringstream>(filename, std::ios::binary);
+                        (*streamPtr) << fileStream.rdbuf();
+                        fileStream.close();
+                        streams.push_back(streamPtr); // this will keep the stream around for a bit longer
+                        atts.push_back(std::make_tuple(std::ref(*streamPtr), filename, 
+                                mailio::message::content_type_t(mailio::message::media_type_t::TEXT, extension)));
+                    }
+                }
+            });
+    if (attachments.size() > 0)
+        msg.attach(atts);
+    try
+    {
+        mailio::smtps conn("smtp.gmail.com", 587);
+        conn.authenticate(from, smtpUserPassword, mailio::smtps::auth_method_t::START_TLS);
+        conn.submit(msg);
+    }
+    catch(const std::exception& ex)
+    {
+        Logger::getInstance()->error(std::string("Exception thrown with message. Error: ") + ex.what() 
+                      + " sending from " + from + " to " + toCollection.front()
+                      + " with password " + smtpUserPassword);
+        return false;
+    }
+    return true;
+};
 
 bool FirefoxEmailComposer::compose()
 {

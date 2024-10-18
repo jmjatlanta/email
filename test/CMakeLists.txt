@@ -32,8 +32,6 @@ target_link_libraries(test_email
     email
     mailio
     ib_helper
-    date
-    CURL::libcurl
     ${OPENSSL_LIBRARIES}
     GTest::gtest_main
     Boost::filesystem
@@ -43,3 +41,10 @@ target_link_libraries(test_email
     Boost::iostreams
     ZLIB::ZLIB
 )
+
+if(HH_DATELIB)
+target_link_libraries(test_email 
+    date
+    CURL::libcurl
+)
+endif(HH_DATELIB)

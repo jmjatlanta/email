@@ -45,6 +45,7 @@ class EmailComposerImpl
     std::set<std::filesystem::path> attachments;
 };
 
+#ifndef MAILIO
 #ifdef _WINDOWS
 class MapiEmailComposer : public EmailComposerImpl
 {
@@ -61,6 +62,7 @@ class MapiEmailComposer : public EmailComposerImpl
 	LPMAPISENDMAILW mapiSendMailW = nullptr;
     LHANDLE session;
 };
+#endif
 #endif
 
 class FirefoxEmailComposer : public EmailComposerImpl
@@ -115,6 +117,7 @@ void EmailComposer::addAttachment(const std::filesystem::path& in) { impl->addAt
 void EmailComposer::setSmtpUserPassword(const std::string& in) { impl->setSmtpUserPassword(in); }
 bool EmailComposer::compose() { return impl->compose(); }
 
+#ifndef MAILIO
 #ifdef _WINDOWS
 /****
  * @brief return a value from HKLM as a string
@@ -284,6 +287,7 @@ bool MapiEmailComposer::compose()
     delete [] str;
 	return ret == 0;
 }
+#endif
 #endif
 
 bool MailioEmailComposer::compose()

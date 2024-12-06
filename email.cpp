@@ -325,10 +325,10 @@ bool MailioEmailComposer::compose()
                     else
                     {
                         std::ifstream fileStream(curr, std::ios_base::in);
-                        auto streamPtr = std::make_shared<std::stringstream>(filename, std::ios::binary);
+                        auto streamPtr = std::make_shared<std::stringstream>();
+                        streams.push_back(streamPtr); // this will keep the stream around for a bit longer
                         (*streamPtr) << fileStream.rdbuf();
                         fileStream.close();
-                        streams.push_back(streamPtr); // this will keep the stream around for a bit longer
                         atts.push_back(std::make_tuple(std::ref(*streamPtr), filename, 
                                 mailio::message::content_type_t(mailio::message::media_type_t::TEXT, extension)));
                     }
